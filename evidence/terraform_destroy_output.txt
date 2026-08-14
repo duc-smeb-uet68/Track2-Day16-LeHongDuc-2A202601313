@@ -1,0 +1,25 @@
+google_compute_backend_service.vllm_backend: Destruction complete after 1m3s
+google_compute_health_check.vllm_hc: Destruction complete after 12s
+google_compute_instance_group.gpu_group: Destruction complete after 13s
+google_compute_instance.gpu_node: Destruction complete after 48s
+google_service_account.gpu_node_sa: Destruction complete after 1s
+google_compute_router_nat.nat: Destruction complete after 4s
+google_compute_router.router: Destruction complete after 13s
+google_compute_subnetwork.private: Destruction complete after 14s
+google_compute_network.ai_vpc: Destruction complete after 22s
+
+Destroy complete! Resources: 16 destroyed.
+
+$ terraform state list
+# no managed resources returned
+TERRAFORM_STATE_RESOURCE_COUNT=0
+
+Post-destroy GCP read-only verification:
+GCP_VM_MATCHES=0
+GCP_NETWORK_MATCHES=0
+GCP_SUBNET_MATCHES=0
+GCP_ROUTER_MATCHES=0
+GCP_FIREWALL_MATCHES=0
+GCP_FORWARDING_RULE_MATCHES=0
+GCP_BACKEND_MATCHES=0
+GCP_SERVICE_ACCOUNT_MATCHES=0

@@ -84,6 +84,16 @@ Gõ `yes` khi được hỏi. Quá trình triển khai hạ tầng mạng trên 
 
 *Mẹo: Các bạn hãy bắt đầu bấm giờ (benchmark) từ lúc gõ `yes` ở bước này nhé!*
 
+Nếu Compute Engine trả về `ZONE_RESOURCE_POOL_EXHAUSTED`, zone đang thiếu capacity chứ không phải lỗi LightGBM. Chọn một cặp region/zone khác có hỗ trợ `e2-medium`, đặt đồng thời hai biến rồi chạy lại `terraform plan` trước khi apply, ví dụ:
+
+```bash
+export TF_VAR_region="us-east1"
+export TF_VAR_zone="us-east1-b"
+terraform plan
+```
+
+Region và zone phải khớp nhau. Nếu lần apply trước đã tạo một phần hạ tầng, đổi region có thể khiến Terraform thay thế subnet, Cloud Router và Cloud NAT; đọc kỹ mọi mục `destroy and create replacement` và lưu ý chi phí trước khi xác nhận apply.
+
 ---
 
 ## Phần 4: Kết nối và Huấn luyện mô hình LightGBM trên CPU Node
@@ -120,16 +130,18 @@ sudo journalctl -u google-startup-scripts.service -f
 
 Chúng ta sẽ dùng **Credit Card Fraud Detection** — bộ dữ liệu chuẩn cho benchmark ML với 284,807 giao dịch thực.
 
-**Lấy Kaggle API Key:**
+**Lấy và chuyển Kaggle API Key an toàn:**
 1. Đăng nhập [kaggle.com](https://www.kaggle.com) -> **Settings** -> **API** -> **Create New Token** -> tải về `kaggle.json`.
-2. Copy nội dung vào VM:
+2. Không dán username/key vào code hoặc command history. Từ terminal local, tạo thư mục đích rồi chuyển file credential qua IAP (thay các placeholder bằng giá trị thực trên máy của bạn):
 
 ```bash
-mkdir -p ~/.kaggle
-# Tạo file credentials (thay YOUR_USERNAME và YOUR_KEY):
-cat > ~/.kaggle/kaggle.json << 'EOF'
-{"username": "YOUR_KAGGLE_USERNAME", "key": "YOUR_KAGGLE_API_KEY"}
-EOF
+gcloud compute ssh ai-gpu-node --zone=<ZONE> --tunnel-through-iap --project=<PROJECT_ID> --command="mkdir -p ~/.kaggle && chmod 700 ~/.kaggle"
+gcloud compute scp <LOCAL_PATH_TO_KAGGLE_JSON> ai-gpu-node:~/.kaggle/kaggle.json --zone=<ZONE> --tunnel-through-iap --project=<PROJECT_ID>
+```
+
+3. SSH vào VM, giới hạn quyền đọc credential rồi tải dataset. Không chụp hoặc in nội dung `kaggle.json`:
+
+```bash
 chmod 600 ~/.kaggle/kaggle.json
 
 mkdir -p ~/ml-benchmark
@@ -138,13 +150,35 @@ kaggle datasets download -d mlg-ulb/creditcardfraud --unzip -p ~/ml-benchmark/
 
 ### Bước 4.4: Huấn luyện và Inference với LightGBM
 
-Viết một script Python (ví dụ `benchmark.py`) thực hiện:
+Repo đã có sẵn `benchmark.py` thực hiện:
 1. Load dataset và tách tập train/test.
 2. Huấn luyện một `LGBMClassifier` (hoặc `lightgbm.train`) để phát hiện gian lận.
 3. Đo thời gian load data và thời gian training.
 4. Đánh giá model trên tập test: AUC-ROC, Accuracy, F1-Score, Precision, Recall.
 5. Đo **inference latency** (dự đoán 1 dòng) và **inference throughput** (dự đoán 1000 dòng).
 6. Ghi toàn bộ kết quả ra file `benchmark_result.json`.
+
+Từ thư mục gốc của repo trên máy local, chuyển script lên VM:
+
+```bash
+gcloud compute scp ./benchmark.py ai-gpu-node:~/ml-benchmark/benchmark.py --zone=<ZONE> --tunnel-through-iap --project=<PROJECT_ID>
+```
+
+Trên VM, chạy benchmark và kiểm tra JSON:
+
+```bash
+cd ~/ml-benchmark
+python3 benchmark.py
+python3 -m json.tool benchmark_result.json
+cat benchmark_report.md
+```
+
+Sau khi chụp terminal, copy JSON và báo cáo về thư mục gốc của repo trên máy local:
+
+```bash
+gcloud compute scp ai-gpu-node:~/ml-benchmark/benchmark_result.json ./benchmark_result.json --zone=<ZONE> --tunnel-through-iap --project=<PROJECT_ID>
+gcloud compute scp ai-gpu-node:~/ml-benchmark/benchmark_report.md ./benchmark_report.md --zone=<ZONE> --tunnel-through-iap --project=<PROJECT_ID>
+```
 
 Chạy script và điền kết quả vào bảng:
 
@@ -207,7 +241,9 @@ Chỉ áp dụng nếu bạn đã làm Phụ lục GPU + LLM ở cuối bài. Ki
 3. **Screenshot tài nguyên**: `top`/`free -h` (hoặc VM Monitoring tab) thể hiện CPU/RAM/Network usage.
 4. **Screenshot GCP Billing Reports** thể hiện các dịch vụ đang phát sinh chi phí (Compute Engine, Cloud NAT).
 5. **Mã nguồn:** Nén thư mục `terraform-gcp/` đã chạy thành công.
-6. **Báo cáo ngắn** (5-10 dòng): nhận xét về kết quả training time, AUC, inference speed trên CPU.
+6. **File `benchmark_report.md`**: báo cáo ngắn 5-10 dòng nhận xét về kết quả training time, AUC, inference speed trên CPU; file này được `benchmark.py` sinh tự động từ kết quả thật.
+
+Nếu nộp bằng GitHub, repo cuối cùng nên có tối thiểu `terraform-gcp/`, `benchmark.py`, `benchmark_result.json`, `benchmark_report.md` và thư mục ảnh minh chứng. Không commit `kaggle.json`, `.env`, Terraform state, access token hoặc khóa dịch vụ. AICodelab chỉ nhận link HTTPS mà giảng viên có thể mở; hệ thống không nhận trực tiếp các file trên.
 
 *(Nếu bạn làm thêm Phụ lục GPU + LLM, có thêm các mục nộp bài riêng — xem cuối Phụ lục.)*
 

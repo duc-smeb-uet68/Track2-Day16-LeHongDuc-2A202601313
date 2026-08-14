@@ -1,0 +1,7 @@
+{
+  "api_endpoint": "http://136.68.35.111/v1",
+  "gpu_node_name": "ai-gpu-node",
+  "gpu_node_zone": "us-east1-b",
+  "iap_ssh_command": "gcloud compute ssh ai-gpu-node --zone=us-east1-b --tunnel-through-iap",
+  "load_balancer_ip": "136.68.35.111"
+}
